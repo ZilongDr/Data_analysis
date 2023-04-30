@@ -127,9 +127,6 @@ class Window(QMainWindow, Ui_MainWindow):
         self.FigureFFT1.setXRange(0,3)
         
         #-----------------------------------Tab2 panel---------------------------------------------------------------
-        # Tab2: Initialize list view
-        self.model_smooth = QStandardItemModel()
-        self.listView2.setModel(self.model_smooth)
         # Tab2: Pushbutton select trace from reference or sample
         self.SelectButton2.clicked.connect(self.select_trace)
         # Tab2: Initilize dict to store selected trace
@@ -143,14 +140,16 @@ class Window(QMainWindow, Ui_MainWindow):
         self.ReplotButton2.clicked.connect(self.replot2)
         # Tab2: Pushbutton smooth
         self.SmoothButton2.clicked.connect(self.smooth)
+        # Tab2: Pushbutton Add to left
+        self.AddLeftButton2.clicked.connect(self.add_left2)
     	# Tab2: Pushbutton save file
         self.SaveButton2.clicked.connect(self.SaveFile2)
         # Tab2: name to appdend after smmoth:
         self.name_smooth=''
         # Tab2: Smooth comobox items:
-        Smooth_item=['Moving average','Savgol filter','swt Wavelet',]
+        Smooth_item=['Wavelet', 'Moving average','Savgol filter',]
         self.SmoothCombo.addItems(Smooth_item)
-        self.Sm_func=[self.Moving_Aver, self.Savgol, self.swt,]
+        self.Sm_func=[self.swt, self.Moving_Aver, self.Savgol, ]
 
         
         
@@ -161,7 +160,7 @@ class Window(QMainWindow, Ui_MainWindow):
         self.FigureSignal2.setLabel('bottom', 'Time (ps)')
         self.FigureFFT2.setLabel('left', 'Amplitude')
         self.FigureFFT2.setLabel('bottom', 'Frequency (THz)')
-        self.FigureFFT2.setLogMode(x=False, y=True)
+        self.FigureFFT2.setLogMode(x=False, y=False)
 
         self.FigureFFT2.setXRange(0,3)
         # Tab2: Initialize smooth method dialog:
@@ -182,13 +181,20 @@ class Window(QMainWindow, Ui_MainWindow):
         self.model_left.clear()
         self.listWidget.clear()
         self.AmbientListWidget.clear()
-        self.model_smooth.clear()
+        self.listWidget2.clear()
         self.df_left.clear()
         self.df.clear()
         self.left_counter=0
         self.file_counter=0
         self.df_remv.clear()
         self.df_select.clear()
+        self.FigureFFT.clear()
+        self.FigureSignal.clear()
+        self.FigureFFT1.clear()
+        self.FigureSignal1.clear()
+        self.FigureFFT2.clear()
+        self.FigureSignal2.clear()
+        
 #------------------------------Tab Functions:------------------------------------------------------------------
     def Tabselected(self):
         self.Delim='\t'
@@ -378,7 +384,7 @@ class Window(QMainWindow, Ui_MainWindow):
     def SaveFile1(self):
         item=self.AmbientListWidget.selectedItems()[0]
         data_name=item.text()
-        data_to_save=self.df[data_name]
+        data_to_save=self.df_remv[data_name]
         Path = QFileDialog.getSaveFileName(self, 'Save File', data_name+'_Remove_ambient'+'.dat', )[0]
         with open(Path, 'w') as file:            
             data_to_save.to_csv(file, sep='\t', index=False)
@@ -550,8 +556,13 @@ class Window(QMainWindow, Ui_MainWindow):
         
 
     def add_to_list2(self, name):
-        self.model_smooth.appendRow(QStandardItem(name))
+        self.listWidget2.addItem(name)
 
+    def add_left2(self):
+        item=self.listWidget2.selectedItems()[0]
+        name=item.text()
+        self.model_left.appendRow(QStandardItem(name))
+        self.df_left[name]=self.df_select[name]
         
     def plot_data_tab2(self, name):
         # update figure in tab 2
@@ -568,18 +579,19 @@ class Window(QMainWindow, Ui_MainWindow):
         self.FigureFFT2.clear()
         self.model_smooth.clear()
         self.df_select.clear()
+        
     def clear_plot2(self):
         self.FigureSignal2.clear()
         self.FigureFFT2.clear()
     def replot2(self):
         # update list view in "Select file name"
-        Index = self.listView2.selectedIndexes()[0]
-        data_name=Index.model().itemFromIndex(Index).text()
+        Index = self.listWidget2.selectedItems()[0]
+        data_name=Index.text()
         self.plot_data_tab2(data_name)
         
     def SaveFile2(self):
-        Index = self.listView2.selectedIndexes()[0]
-        data_name=Index.model().itemFromIndex(Index).text()
+        Index = self.listWidget2.selectedItems()[0]
+        data_name=Index.text()
         data_to_save=self.df_select[data_name]
         Path = QFileDialog.getSaveFileName(self, 'Save File', data_name+'.dat', )[0]
         with open(Path, 'w') as file:            
