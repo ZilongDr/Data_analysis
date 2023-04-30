@@ -70,12 +70,12 @@ class Window(QMainWindow, Ui_MainWindow):
 
 
                 # Right: Set  Domain comobox:
-                self.DomainComboBox.addItem('Frequency', ['Simple Frequency domain', 'FFT_Wiener'])
+                self.DomainComboBox.addItem('Frequency', ['FWDD',])
                 self.DomainComboBox.addItem('Time', ['FISTA', 'AFISTA', 'SALSA',])
                 # Tab3: Update the Deconvolution method combobox once the Geometry combobox is changed:
                 self.DomainComboBox.currentIndexChanged.connect(self.updateDeconvCombo)
                 self.updateDeconvCombo(self.DomainComboBox.currentIndex())
-                self.Dv_func_freq=[] # self.FP, self.air, self.Frequency_domain]
+                self.Dv_func_freq=[self.FWDD] # self.FP, self.air, self.Frequency_domain]
                 self.Dv_func_time=[ self.FISTA, self.AFISTA]
                 # Tab3: Pushbutton Deconvolute:
                 self.DeconvButton.clicked.connect(self.Deconv)
@@ -330,7 +330,7 @@ class Window(QMainWindow, Ui_MainWindow):
                 Index = self.DeconvListWidget.selectedItems()[0]
                 data_name=Index.text()
                 data_to_save=self.df_decon[data_name]
-                Path = QFileDialog.getSaveFileName(self, 'Save File', data_name+'_time_freq'+'.dat', )[0]
+                Path = QFileDialog.getSaveFileName(self, 'Save File', data_name+'.dat', )[0]
                 with open(Path, 'w') as file:            
                         data_to_save.to_csv(file, sep='\t', index=False)
         
@@ -342,7 +342,21 @@ class Window(QMainWindow, Ui_MainWindow):
                 self.DeconvListWidget.takeItem(row_index)
         
 #------------------------------------------------Deconvolution functions-----------------------------------------------------------------
-        
+        def FWDD(self, *args):
+                data_ref_freq=self.df_ref_freq[self.ref_deconv_name]
+                data_sample_freq=self.df_sample_freq[self.sample_deconv_name]
+                freq=np.array(data_ref_freq['Frequency'])
+                f_Hz=ut.THz_to_Hz(freq)
+                data_ref_FT=np.array(data_ref_freq['FT'])
+                data_sample_FT=np.array(data_sample_freq['FT'])
+                H_f=np.divide(data_ref_FT, data_sample_FT)
+                Npad=next_fast_len(len(freq))
+                t_s, H_t_complex=FT.IFFT(f_Hz, H_f, Npad)
+                H_t=np.real(H_t_complex[:len(t_s)//2])
+                t_ps=ut.s_to_ps(t_s[:len(t_s)//2])
+                pg.plot(freq, abs(H_f))                
+                pg.plot(t_ps, H_t)
+                
         def FISTA(self, *args):
                 
                 data_ref_time=self.df_ref_time[self.ref_deconv_name]
