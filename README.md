@@ -3,9 +3,10 @@ Programs for data analysis
 
 # Step to use the program:
 ## Package to install before use:
-1. pyqt5: https://anaconda.org/anaconda/pyqt
-2. pylops: https://pylops.readthedocs.io/en/stable/installation.html
-3. pyqtgraph: https://www.pyqtgraph.org/
+1. Python>=3.8, better to be 3.9
+2. pyqt5: https://anaconda.org/anaconda/pyqt
+3. pylops: https://pylops.readthedocs.io/en/stable/installation.html
+4. pyqtgraph: https://www.pyqtgraph.org/
 
 ## How to run the program:
 ### Step 1: Copy all the files to local directory.
