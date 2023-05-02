@@ -19,8 +19,12 @@ In the command line (Anaconda prompt), navigate to the folder where the .py file
 ## In "Data_processing.py":
 ### Tab 1: Load data 
 * Load the data from file by first determining the number of rows to skip and the type of delimiter in the data file. One could load ".csv", ".txt" and ".dat" files.
-* The time domain and frequency domain data can be plotted.
-* Save the date into file by pressing "Save to file" button. The saved data contains both time and frequency domain results.
+* If the original data file contains comments, set number of "skip rows" to skip the lines of comments.
+* Once the "load" button is pressed, a dialog will be pop up. Click the check boxes to determine the time axis and the signal axis. One could load multiple signals at one time. If "append header" check box is checked, the loaded file names will be appended with corresponding headers.
+* The time domain and frequency domain data can be plotted after loading the file. The loaded file will be shown in the list.
+* Use the "Subtract baseline" function to subtract the baseline in time domain or remove the low or high frequency components in frequency domain. Drag and set the region to determine the area to keep the frequency components. This is equivalent to performing a bandpass filter in frequency domain.
+* Use the average function to average multiply files, by pressing the "Average" button. One can select multiple files by "Shift+" selecting the file names in the list.
+* To save the data file by pressing "Save to file" button. The saved data contains both time and frequency domain results.
 * Add the file to the left repository by pressing "Add to left" button for further data processing.
 ### Tab 2: Remove ambient (to be completed)
 * Set reference and set sample data from left repository
