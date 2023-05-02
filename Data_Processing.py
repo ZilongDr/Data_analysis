@@ -19,11 +19,12 @@ from scipy.fft import next_fast_len
 
 from func import FFT as FT
 from func import unit_conversion as ut
+from func import misc
 from smooth_func import SWT, moving_average
 
 from GUI.GUI_read_data_qtgraph import Ui_MainWindow
 
-from Module.module_processing import Load_file_dialog, Savgol_dialog, SWT_dialog, BaseLine_dialog, Moving_average_dialog, TFWindow_dialog
+from Module.module_processing import Load_file_dialog, Savgol_dialog, SWT_dialog, BaseLine_Sub_dialog, Moving_average_dialog, TFWindow_dialog, BaseLine_dialog
 
 class Window(QMainWindow, Ui_MainWindow):
     def __init__(self, parent=None):
@@ -73,6 +74,8 @@ class Window(QMainWindow, Ui_MainWindow):
         self.RemoveButton1.clicked.connect(self.remove)
         # Pushbutton tab: replot select file
         self.PlotButton1.clicked.connect(self.replot)
+        # Tab: Pushbutton Subtract Baseline
+        self.BaselineSubButton.clicked.connect(self.Baseline_sub)
         # Tab: PUshbutton Average
         self.AverageButton.clicked.connect(self.Average)
         # Tab: Pushbutton save file
@@ -205,9 +208,10 @@ class Window(QMainWindow, Ui_MainWindow):
         
     def getFile(self):
         self.filename = QFileDialog.getOpenFileName(filter = "dat (*.dat);; csv (*.csv);; txt (*.txt)")[0]
-        self.SkipRow_num=int(self.SkipRowEdit.text())
-        #print(self.df.keys())
-        self.readData()
+        if self.filename !="":
+            self.SkipRow_num=int(self.SkipRowEdit.text())
+            #print(self.df.keys())
+            self.readData()
     
     def combine_fft_data(self, t, E_t):
         data={'Time': t, 'Signal': E_t}
@@ -241,10 +245,10 @@ class Window(QMainWindow, Ui_MainWindow):
                 time_indx=self.dlg_file.time_indx
                 signal_indx=self.dlg_file.signal_indx
                 #f_name=self.dlg_file.f_name
-                t_ps_read=np.array(data[col[time_indx]])
-                t_ps=t_ps_read[~np.isnan(t_ps_read)]
+                t_ps=misc.convert_to_np(data[col[time_indx]])
                 t_ps=t_ps-t_ps[0]
                 t_interp=np.linspace(t_ps[0], t_ps[-1], 2**11)
+                print(t_interp)
                 for counter, i in enumerate(signal_indx):
                     if i is not None:    
                         #if f_name is not None:
@@ -258,8 +262,7 @@ class Window(QMainWindow, Ui_MainWindow):
                         if f_name_new in self.df:
                             f_name_new=f_name_new+'_'+str(self.file_counter)
                             self.file_counter=self.file_counter+1
-                        E_t_read=np.array(data[col[i]])
-                        E_t=E_t_read[~np.isnan(E_t_read)]
+                        E_t=misc.convert_to_np(data[col[i]])
                         #pg.plot(t_ps, E_t)
                         #Data interpolation:
                         E_t_interp=np.interp(t_interp,t_ps,E_t)
@@ -275,6 +278,29 @@ class Window(QMainWindow, Ui_MainWindow):
             except:
                 pass
             
+    def Baseline_sub(self):
+        item=self.listWidget.selectedItems()[0]
+        name=item.text()
+        data=self.df[name]
+        self.dlg_Baseline_sub=BaseLine_Sub_dialog(data)
+        if self.dlg_Baseline_sub.exec():
+            t_ps=self.dlg_Baseline_sub.t_ps
+            E_t=self.dlg_Baseline_sub.E_t_window
+            freq=self.dlg_Baseline_sub.freq_THz
+            E_w=self.dlg_Baseline_sub.E_w
+            f_name=name+'_baseline_subtracted'
+            df_time={'Time':t_ps, 'Signal':E_t}
+            data_time=pd.DataFrame(data=df_time)
+            df_freq={'Frequency':freq, 'FT_complex':E_w}
+            data_freq=pd.DataFrame(data=df_freq)
+            data_combined=pd.concat([data_time, data_freq], ignore_index=True, axis=1)
+            data_combined.columns=['Time', 'Signal', 'Frequency', 'FT_complex']
+            self.df[f_name]=data_combined
+            self.listWidget.addItem(f_name)
+            self.plot_data_tab(f_name)
+            
+            
+    
     def Average(self):
         import difflib
         items=self.listWidget.selectedItems()
@@ -285,10 +311,11 @@ class Window(QMainWindow, Ui_MainWindow):
         match=difflib.SequenceMatcher(None, name_list[0], name_list[1]).find_longest_match(alo=0, ahi=len(name_list[0]), blo=0, bhi=len(name_list[1]))
         name_to_save=name_list[0][match.a:match.a+match.size]+'_Average'
         # Do the average:
-        y=np.zeros_like(self.df[name_list[0]]['Signal'])
+        y=np.zeros_like(misc.convert_to_np(self.df[name_list[0]]['Signal']))
         for i in name_list:
-            y=y+self.df[i]['Signal']
-        data_t=np.array(self.df[name_list[0]]['Time'])
+            Signal=misc.convert_to_np(self.df[i]['Signal'])
+            y=y+Signal
+        data_t=misc.convert_to_np(self.df[name_list[0]]['Time'])
         y=np.array(y/len(items))
         data_to_save=self.combine_fft_data(data_t, y)
         self.df[name_to_save]=data_to_save
@@ -491,11 +518,9 @@ class Window(QMainWindow, Ui_MainWindow):
     def smooth(self):
         smooth_method_index=self.SmoothCombo.currentIndex()
         data=self.df_select[self.select_name]
-        t_ps=np.array(data['Time'])
-        t_ps2=t_ps[~np.isnan(t_ps)]
-        E_t=np.array(data['Signal'])
-        E_t2=E_t[~np.isnan(E_t)]
-        self.Sm_func[smooth_method_index](t_ps2, E_t2, data)        
+        t_ps=misc.convert_to_np(data['Time'])
+        E_t=misc.convert_to_np(data['Signal'])
+        self.Sm_func[smooth_method_index](t_ps, E_t, data)        
 
     
     def Moving_Aver(self, t_ps, E_t, *args):
