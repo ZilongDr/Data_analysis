@@ -3,6 +3,7 @@ from PyQt5.QtWidgets import (
 )
 import pyqtgraph as pg
 import numpy as np
+from scipy.signal.windows import blackmanharris, boxcar, flattop, hamming, nuttall, gaussian
 
 from scipy.fft import next_fast_len
 from func import FFT as FT
@@ -10,7 +11,8 @@ from func import unit_conversion as ut
 from func import misc
 from PyQt5.QtGui import QIntValidator
 
-from GUI import Moving_average_gui, Savgol_gui, SWT_gui, TFWindow_gui, BaseLine_gui
+from GUI import Moving_average_gui, Savgol_gui, SWT_gui, TFWindow_gui, BaseLine_sub_gui, BaseLine_gui
+from pybaselines import Baseline
 
 
 #--------------------------------------Dialog for load files--------------------------------------------------------------------------------------------------------
@@ -89,6 +91,75 @@ class Load_file_dialog(QDialog, QWidget):
     def exit(self):
         self.close() 
 
+#--------------------------------------Dialog for baseline subtraction---------------------------------------------------------------------------------------------
+class BaseLine_Sub_dialog(QDialog, BaseLine_sub_gui.Ui_Dialog):
+    def __init__(self, data):
+        super().__init__()
+        # Run the .setupUi() method to show the GUI
+        self.setupUi(self)
+        self.data=data
+        self.t_ps=misc.convert_to_np(data['Time'])
+        self.E_t=misc.convert_to_np(data['Signal'])
+        self.freq_THz=misc.convert_to_np(data['Frequency'])
+        self.FT_complex=misc.convert_to_np(data['FT_complex'])
+        self.phase=np.angle(self.FT_complex)
+        self.amp=abs(self.FT_complex)
+        # Baseline initialization:
+        self.baseline_num=0
+        self.plot_ini()
+        self.SetWindowButton.clicked.connect(self.Run_baseline)
+        self.ClearButton.clicked.connect(self.clear)
+        self.buttonBox.accepted.connect(self.submitclose)
+        self.buttonBox.rejected.connect(self.exit)
+        
+    def regionUpdated(self):
+        self.time_lw=self.region.getRegion()[0]
+        self.time_hg=self.region.getRegion()[1]
+        self.region.setRegion((self.time_lw, self.time_hg))
+        
+    def plot_ini(self):
+        self.FigureFFT.clear()
+        self.Figure.clear()
+        # Plot data
+        #Initialize color counter:
+        self.plot_counter=1
+        pen=pg.mkPen(color=pg.intColor(self.plot_counter))
+        self.FigureFFT.setMouseEnabled(x=True, y=True)
+        self.region = pg.LinearRegionItem(values=(self.freq_THz[0], self.freq_THz[200]), bounds=(self.freq_THz[0], self.freq_THz[-1]),brush=(100, 100, 100, 60))
+        self.FigureFFT.addItem(self.region, ignoreBounds=True)
+        self.FigureFFT.plot(self.freq_THz, self.amp, pen=pen)
+        self.region.sigRegionChangeFinished.connect(self.regionUpdated)
+        self.Figure.plot(self.t_ps, self.E_t, pen=pen)
+    
+    def update_plot(self,):
+        self.plot_counter=self.plot_counter+1
+        pen=pg.mkPen(color=pg.intColor(self.plot_counter))
+        self.FigureFFT.plot(self.freq_THz, self.amp_filtered, pen=pen)
+        self.Figure.plot(self.t_ps, self.E_t_window, pen=pen)        
+    
+    def Run_baseline(self):
+        self.regionUpdated()
+        indx_lw, _=misc.find_array_index(self.freq_THz, self.time_lw)
+        indx_hg, _=misc.find_array_index(self.freq_THz, self.time_hg)
+        Window=np.zeros_like(self.freq_THz)
+        Window[indx_lw:indx_hg]=1
+        self.amp_filtered=np.multiply(Window, self.amp)
+        self.E_w=self.amp_filtered*np.exp(1j*self.phase)
+        f=ut.THz_to_Hz(self.freq_THz)
+        Npad=next_fast_len(2**12)
+        t, E_t_window_full=FT.IFFT(f, self.E_w, Npad)
+        self.E_t_window=E_t_window_full[0:len(E_t_window_full)//2]
+        self.update_plot()
+    
+    def clear(self):
+        self.plot_ini()
+    
+    def submitclose(self):
+        self.accept()
+        
+    def exit(self):
+        self.close()
+        
     
 #--------------------------------------Dialog for smoothing using moving average------------------------------------------------------------------------------------
 class Moving_average_dialog(QDialog, Moving_average_gui.Ui_Dialog):
@@ -165,12 +236,10 @@ class SWT_dialog(QDialog, SWT_gui.Ui_Dialog):
         self.time_hg=self.region.getRegion()[1]
 
     def find_max(self):
-        print(self.time_lw, self.time_hg)
-        d_array=np.array(self.data['Time'])
-        d_array=d_array[~np.isnan(d_array)]
+        d_array=misc.convert_to_np(self.data['Time'])
         lw_indx=misc.find_array_index(d_array, self.time_lw)[0]
         hg_indx=misc.find_array_index(d_array,self.time_hg)[0]
-        print(lw_indx, hg_indx)
+        #print(lw_indx, hg_indx)
         mx=(self.data['Signal'].iloc[lw_indx:hg_indx]).abs().max()
         
         self.max_value.append(mx)
@@ -200,15 +269,11 @@ class TFWindow_dialog(QDialog, TFWindow_gui.Ui_Dialog):
         self.OKButton.clicked.connect(self.submitclose)
              
         # Remove NaN in the data
-        t_ps_ref=np.array(data_ref['Time'])
-        self.t_ps2_ref=t_ps_ref[~np.isnan(t_ps_ref)]
-        t_ps_sample=np.array(data_sample['Time'])
-        self.t_ps2_sample=t_ps_sample[~np.isnan(t_ps_sample)]
-        
-        E_t_ref=np.array(data_ref['Signal'])
-        self.E_t2_ref=E_t_ref[~np.isnan(E_t_ref)]
-        E_t_sample=np.array(data_sample['Signal'])
-        self.E_t2_sample=E_t_sample[~np.isnan(E_t_sample)]
+        self.t_ps_ref=misc.convert_to_np(data_ref['Time'])
+        self.t_ps_sample=misc.convert_to_np(data_sample['Time'])
+
+        self.E_t_ref=misc.convert_to_np(data_ref['Signal'])
+        self.E_t_sample=misc.convert_to_np(data_sample['Signal'])
         
         self.f_ref_0=data_ref['Frequency']
         self.Amp_ref_0=abs(data_ref['FT_complex'])
@@ -247,21 +312,21 @@ class TFWindow_dialog(QDialog, TFWindow_gui.Ui_Dialog):
         
     def SetWindow(self):
 
-        from scipy.signal.windows import blackmanharris, boxcar, flattop, hamming, nuttall, gaussian
+        
         from func import Gaussian_intensity as GS
         self.win_func=self.WinComboBox.currentText()
         self.regionUpdated()
-        self.Window=np.zeros_like(self.t_ps2_ref)
-        indx_lw, _=misc.find_array_index(self.t_ps2_ref, self.time_lw)
-        indx_hg, _=misc.find_array_index(self.t_ps2_ref, self.time_hg)
+        self.Window=np.zeros_like(self.t_ps_ref)
+        indx_lw, _=misc.find_array_index(self.t_ps_ref, self.time_lw)
+        indx_hg, _=misc.find_array_index(self.t_ps_ref, self.time_hg)
         if self.win_func=='Gaussian':
-            fwhm=abs(self.time_hg-self.time_lw)*8
+            fwhm=abs(self.time_hg-self.time_lw)*1
             #Window_kernel=GS.calc_I_t(self.t_ps2_ref[indx_lw:indx_hg], fwhm, 0)
             Window_kernel=gaussian(abs(indx_hg-indx_lw), fwhm, True)
         else:
             Window_kernel=locals()[self.win_func](abs(indx_hg-indx_lw), True)
         self.Window[indx_lw: indx_hg]=Window_kernel
-        self.E_t_ref_window=np.multiply(self.E_t2_ref, self.Window)
+        self.E_t_ref_window=np.multiply(self.E_t_ref, self.Window)
         Npad=next_fast_len(2**12)
         t_s=ut.ps_to_s(self.t_ps2_ref)
         f, self.E_ref_w_window=FT.FFT(t_s, self.E_t_ref_window, Npad)
@@ -279,10 +344,10 @@ class TFWindow_dialog(QDialog, TFWindow_gui.Ui_Dialog):
         #self.FigureRef.clear()
         #self.FigureRef_FFT.clear()
         self.plot_counter=self.plot_counter+1
-        self.line_ref=self.FigureRef.plot(self.t_ps2_ref, self.E_t_ref_window, pen=pg.mkPen(color=pg.intColor(self.plot_counter), width=2))
-        self.FigureRef.plot(self.t_ps2_ref, self.Window, pen=pg.mkPen(color=pg.intColor(self.plot_counter+2), width=2))
+        self.line_ref=self.FigureRef.plot(self.t_ps_ref, self.E_t_ref_window, pen=pg.mkPen(color=pg.intColor(self.plot_counter), width=2))
+        self.FigureRef.plot(self.t_ps_ref, self.Window, pen=pg.mkPen(color=pg.intColor(self.plot_counter+2), width=2))
         self.line_FFT=self.FigureRef_FFT.plot(self.f_ref_THz, abs(self.E_ref_w_window), pen=pg.mkPen(color=pg.intColor(self.plot_counter), width=2))
-        self.line_sample=self.FigureSample.plot(self.t_ps2_sample, self.E_sample_t_window, pen=pg.mkPen(color=pg.intColor(self.plot_counter), width=2))
+        self.line_sample=self.FigureSample.plot(self.t_ps_sample, self.E_sample_t_window, pen=pg.mkPen(color=pg.intColor(self.plot_counter), width=2))
 
     def plot_ini(self):
         self.FigureRef.clear()
@@ -295,9 +360,9 @@ class TFWindow_dialog(QDialog, TFWindow_gui.Ui_Dialog):
         
         #self.FigureRef.setBackground('w')
         self.FigureRef.setMouseEnabled(x=True, y=True)
-        self.region = pg.LinearRegionItem(values=(self.t_max-2, self.t_max+2), bounds=(self.t_ps2_ref[0], self.t_ps2_ref[-1]),brush=(100, 100, 100, 60))
+        self.region = pg.LinearRegionItem(values=(self.t_max-2, self.t_max+2), bounds=(self.t_ps_ref[0], self.t_ps_ref[-1]),brush=(100, 100, 100, 60))
         self.FigureRef.addItem(self.region, ignoreBounds=True)
-        self.FigureRef.plot(self.t_ps2_ref, self.E_t2_ref, pen=pen)
+        self.FigureRef.plot(self.t_ps_ref, self.E_t_ref, pen=pen)
         line_ver=pg.InfiniteLine(pos=self.t_max, angle=90)
         self.FigureRef.addItem(line_ver)
         self.region.sigRegionChangeFinished.connect(self.regionUpdated)
@@ -305,7 +370,7 @@ class TFWindow_dialog(QDialog, TFWindow_gui.Ui_Dialog):
         self.FigureRef_FFT.setXRange(0,3)
         #self.FigureTransfer.plot(self.f_ref_0, abs(self.H))
         #self.FigureTransfer.setXRange(0,3)
-        self.FigureSample.plot(self.t_ps2_sample, self.E_t2_sample)
+        self.FigureSample.plot(self.t_ps_sample, self.E_t_sample)
 
     
     def ClearAll(self):
@@ -314,7 +379,9 @@ class TFWindow_dialog(QDialog, TFWindow_gui.Ui_Dialog):
         #self.FigureRef.removeItem(self.line_ref)
         #self.line_FFT.clear()
         #self.line_sample.clear()
-        
+    
+                
+    
     def submitclose(self):
         #self.wt=self.WaveletComboBox.currentText()
         

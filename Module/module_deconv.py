@@ -4,6 +4,7 @@ from PyQt5.QtWidgets import (
     QDialog, QFileDialog, QWidget,QGroupBox, QDialogButtonBox, QLineEdit, QGridLayout, QCheckBox, QHBoxLayout
 )
 from PyQt5.QtGui import QIntValidator
+from func import misc
 import pyqtgraph as pg
 import pandas as pd
 import numpy as np
@@ -125,19 +126,51 @@ class FISTA_dialog(QDialog, FISTA_gui.Ui_Dialog):
                 # Text browser
                 self.textBrowser.setAcceptRichText(True)
                 # Plot data
-                #self.GraphWidget.setBackground('w')
-                self.GraphWidget1.plot(self.data_sample['Time'], self.data_sample['Signal'], pen=pg.mkPen(0))
+                self.plot_ini()
                 # Press Run push button
                 self.RunButton.clicked.connect(self.Run_FISTA)
                 # Press Save button
                 self.SaveButton.clicked.connect(self.SaveFile)
         
+        def regionUpdated(self):
+                self.time_lw=self.region.getRegion()[0]
+                self.time_hg=self.region.getRegion()[1]
+                self.region.setRegion((self.time_lw, self.time_hg))
+        
+        def plot_ini(self):
+                self.GraphWidget1.clear()
+                self.GraphWidget2.clear()
+                self.plot_counter=1
+                pen=pg.mkPen(color=pg.intColor(self.plot_counter))
+                 # Plot data
+                #self.GraphWidget.setBackground('w')
+                self.GraphWidget1.setMouseEnabled(x=True, y=True)
+                self.region = pg.LinearRegionItem(values=(self.data_ref['Time'][0], self.data_ref['Time'][100]), bounds=(self.data_ref['Time'].iloc[0], self.data_ref['Time'].iloc[-1]),brush=(100, 100, 100, 60))
+                self.GraphWidget1.addItem(self.region, ignoreBounds=True)
+                self.region.sigRegionChangeFinished.connect(self.regionUpdated)
+                self.GraphWidget1.plot(self.data_ref['Time'], self.data_ref['Signal'], pen=pen)
+        
+        def update_plot(self, ):
+                self.GraphWidget1.clear()
+                self.plot_counter=self.plot_counter+1
+                pen=pg.mkPen(color=pg.intColor(self.plot_counter))
+                self.GraphWidget1.plot(self.data_sample['Time'], self.data_sample['Signal'], pen=pen, name='Sample trace') 
+                self.GraphWidget2.plot(misc.convert_to_np(self.data_sample['Time']), self.xfista, pen=pen, name='Impulse response')        
+                self.GraphWidget1.addLegend()
+                self.GraphWidget2.addLegend()
     
         def Run_FISTA(self, ):
-                t=self.data_ref['Time']
-                Kernel=self.data_ref['Signal']
-                y=self.data_sample['Signal']
-                N=len(Kernel)
+                self.regionUpdated()
+                t=misc.convert_to_np(self.data_ref['Time'])
+                indx_lw,_=misc.find_array_index(t, self.time_lw)
+                indx_hg,_=misc.find_array_index(t, self.time_hg)
+                E_t_ref=misc.convert_to_np(self.data_ref['Signal'])
+                Kernel=E_t_ref[indx_lw:indx_hg]
+                # Find indx of max of the Kernel:
+                max_num=Kernel.max()
+                indx_max,_=misc.find_array_index(Kernel, max_num)
+                y=misc.convert_to_np(self.data_sample['Signal'])
+                N=len(t)
                 if not self.niter.text():
                         pass
                 else:
@@ -146,20 +179,25 @@ class FISTA_dialog(QDialog, FISTA_gui.Ui_Dialog):
                         pass
                 else:
                         self.Tol_num=float(self.Tol.text())
-                Cop=pylops.signalprocessing.Convolve1D(N, h=Kernel)
+                self.Cop=pylops.signalprocessing.Convolve1D(N, h=Kernel, offset=indx_max)
                 #dottest(Cop, verb=True)
-                
-                pen = pg.mkPen(1)
-                #L = np.abs((Cop.H * Cop).eigs(1)[0])
-                xfista, iteration_result, resista = pylops.optimization.sparsity.fista(
-                        Cop, y, niter=self.niter_num, eps=5e-1, tol=self.Tol_num, threshkind='soft', show=True)
-                
 
-                self.GraphWidget2.plot(t, xfista, pen=pen)
+                #L = np.abs((Cop.H * Cop).eigs(1)[0])
+                self.xfista, iteration_result, resista = pylops.optimization.sparsity.fista(
+                        self.Cop, y, niter=self.niter_num, eps=5e-1, tol=self.Tol_num, threshkind='soft', show=True)
                 text='Acutal iteration runned'+str(iteration_result)
                 self.textBrowser.append(text)
-                d={'Time':t, 'Signal': xfista}
+                d={'Time':t, 'Signal': self.xfista}
                 self.deconv_data=pd.DataFrame(data=d)
+                self.update_plot()
+                self.result_check()
+                
+        def result_check(self):
+                y_test=self.Cop*self.xfista
+                pen=pg.mkPen(color=(245, 66, 66))
+                self.GraphWidget1.plot(misc.convert_to_np(self.deconv_data['Time']),y_test, pen=pen, name='Result_check')
+                self.GraphWidget1.addLegend()
+
 
         def SaveFile(self):
             data_to_save=self.deconv_data
@@ -173,8 +211,7 @@ class FISTA_dialog(QDialog, FISTA_gui.Ui_Dialog):
     
         def clear_max(self):
                 #self.GraphWidget1.clear()
-                self.GraphWidget2.clear()
-                
+                self.plot_ini()                
                 self.niter_num=100 
                 self.Tol_num=1e-5
                 self.textBrowser.clear()
@@ -196,23 +233,39 @@ class AFISTA_dialog(QDialog, AFISTA_gui.Ui_Dialog):
                 # tolerant
                 self.Tol_num=1e-5
                 self.Tol.setText(str(self.Tol_num))
-
                 # Push Button
                 self.OKButton.clicked.connect(self.submitclose)
                 self.ClearButton.clicked.connect(self.clear_max)
                 self.CancelhButton.clicked.connect(self.exit)
                 # Text browser
-                
                 self.textBrowser.setAcceptRichText(True)
-                # Plot data
-                
-                #self.GraphWidget.setBackground('w')
-                self.GraphWidget1.plot(self.data_sample['Time'], self.data_sample['Signal'], pen=pg.mkPen(0))
-                # Press Find Max push button
-                self.RunButton.clicked.connect(self.Run_FISTA)
+                self.plot_ini()
+                # Press Run push button
+                self.RunButton.clicked.connect(self.Run_AFISTA)
         
-    
-        def Run_FISTA(self, ):
+        def regionUpdated(self):
+                self.time_lw=self.region.getRegion()[0]
+                self.time_hg=self.region.getRegion()[1]
+                self.region.setRegion((self.time_lw, self.time_hg))
+        def plot_ini(self):
+                self.GraphWidget1.clear()
+                self.GraphWidget2.clear()
+                self.plot_counter=1
+                pen=pg.mkPen(color=pg.intColor(self.plot_counter))
+
+                 # Plot data
+                #self.GraphWidget.setBackground('w')
+                self.GraphWidget1.setMouseEnabled(x=True, y=True)
+                self.region = pg.LinearRegionItem(values=(self.data_ref['Time'][0], self.data_ref['Time'][100]), bounds=(self.data_ref['Time'].iloc[0], self.data_ref['Time'].iloc[-1]),brush=(100, 100, 100, 60))
+                self.GraphWidget1.addItem(self.region, ignoreBounds=True)
+                self.region.sigRegionChangeFinished.connect(self.regionUpdated)
+                self.GraphWidget1.plot(self.data_ref['Time'], self.data_ref['Signal'], pen=pen)
+                self.region.sigRegionChangeFinished.connect(self.regionUpdated)
+
+        def update_plot(self):
+                return
+                
+        def Run_AFISTA(self, ):
                 t=self.data_ref['Time']
                 Kernel=self.data_ref['Signal']
                 y=self.data_sample['Signal']
