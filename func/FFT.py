@@ -8,7 +8,29 @@ import numpy as np
 from scipy.fft import fft, fftshift, ifft, next_fast_len, fftfreq, rfft, rfftfreq, irfft
 from scipy.constants import h, hbar, c, e, pi
 import matplotlib.pyplot as plt
-def FFT (time_base,data, N):
+from func import Window, misc
+
+def Apodization(data):
+    """Generage asymmetric apodization window function using 3-term Blackmann Harris 
+    Args:
+        data (1d array, float): THz signal
+    """
+    d_max=data.max()
+    indx_max,_=misc.find_array_index(data, d_max)
+    half_M=len(data)-indx_max
+    M=2*half_M
+    
+    Win=Window.BlackmanHarris3(M)
+    indx_win_max, _=misc.find_array_index(Win, Win.max())
+    
+    Win_fun=np.zeros_like(data)
+    Win_fun[indx_max:]=Win[indx_win_max:-1]
+    Win_fun[0:indx_max]=Win[indx_win_max-indx_max:indx_win_max]
+    return Win_fun
+    
+    
+
+def FFT (time_base,data, N, apod=True):
     """Do the Fourier transform on the data and output the frequency axis
 
     Args:
@@ -41,8 +63,12 @@ def FFT (time_base,data, N):
     # prepare the 'frequecy' axis in Hz
     freq=rfftfreq(N, delta_t)
     #freq=freq_full[0:len(freq_full)//2]
+    if apod==True:
+        w=Apodization(data)
+        data=np.multiply(w, data)
+    else:
+        pass    
     # Do the FFT using rfft so that only the positive frequency are taken:
-
     F=rfft(data, N)
     #F_processed=F[0:totalN_opt//2] # Take the unpad data
     #Phase=np.unwrap(np.angle(F_processed, deg=False))
