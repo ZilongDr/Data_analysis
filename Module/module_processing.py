@@ -3,7 +3,6 @@ from PyQt5.QtWidgets import (
 )
 import pyqtgraph as pg
 import numpy as np
-from scipy.signal.windows import blackmanharris, boxcar, flattop, hamming, nuttall, gaussian
 
 from scipy.fft import next_fast_len
 from func import FFT as FT
@@ -278,8 +277,8 @@ class TFWindow_dialog(QDialog, TFWindow_gui.Ui_Dialog):
         self.f_ref_0=data_ref['Frequency']
         self.Amp_ref_0=abs(data_ref['FT_complex'])
         # Find maximum peak position
-        indx_max, _=misc.find_array_index(self.E_t2_ref, max(abs(self.E_t2_ref)))
-        self.t_max=self.t_ps2_ref[indx_max]
+        indx_max, _=misc.find_array_index(self.E_t_ref, max(abs(self.E_t_ref)))
+        self.t_max=self.t_ps_ref[indx_max]
         
         # Combo box for window function:
         win_item=['boxcar','Gaussian','blackmanharris','flattop', 'hamming', 'nuttall']
@@ -287,7 +286,9 @@ class TFWindow_dialog(QDialog, TFWindow_gui.Ui_Dialog):
         self.win_func='boxcar'
 
         # Calculate transfer function in frequency domain:
-        self.H=np.divide(data_sample['FT_complex'], data_ref['FT_complex'])
+        FT_sample=misc.convert_to_np(data_sample['FT_complex'])
+        FT_ref=misc.convert_to_np(data_ref['FT_complex'])
+        self.H=np.divide(FT_sample, FT_ref, out=np.zeros_like(FT_sample), where=FT_ref!=0)
         # Plot initialization:
         self.plot_ini()
         
@@ -295,7 +296,7 @@ class TFWindow_dialog(QDialog, TFWindow_gui.Ui_Dialog):
         self.SetWindowButton.clicked.connect(self.SetWindow)
         # Clear button:
         self.ClearButton.clicked.connect(self.ClearAll)
-
+        #pg.plot(self.f_ref_0 ,abs(self.H))
         
 
     def regionUpdated(self):
@@ -312,7 +313,7 @@ class TFWindow_dialog(QDialog, TFWindow_gui.Ui_Dialog):
         
     def SetWindow(self):
 
-        
+        from scipy.signal.windows import blackmanharris, boxcar, flattop, hamming, nuttall, gaussian
         from func import Gaussian_intensity as GS
         self.win_func=self.WinComboBox.currentText()
         self.regionUpdated()
@@ -324,21 +325,21 @@ class TFWindow_dialog(QDialog, TFWindow_gui.Ui_Dialog):
             #Window_kernel=GS.calc_I_t(self.t_ps2_ref[indx_lw:indx_hg], fwhm, 0)
             Window_kernel=gaussian(abs(indx_hg-indx_lw), fwhm, True)
         else:
-            Window_kernel=locals()[self.win_func](abs(indx_hg-indx_lw), True)
+            Window_kernel=locals()[str(self.win_func)](abs(indx_hg-indx_lw), True)
+            
         self.Window[indx_lw: indx_hg]=Window_kernel
         self.E_t_ref_window=np.multiply(self.E_t_ref, self.Window)
         Npad=next_fast_len(2**12)
-        t_s=ut.ps_to_s(self.t_ps2_ref)
+        t_s=ut.ps_to_s(self.t_ps_ref)
         f, self.E_ref_w_window=FT.FFT(t_s, self.E_t_ref_window, Npad)
         self.f_ref_THz=ut.Hz_to_THz(f)
         #self.E_ref_w=abs(self.E_ref_w_window)
         E_sample_w=np.array(np.multiply(self.E_ref_w_window, self.H), dtype=complex)
-        
         t, self.E_sample_t_window=FT.IFFT(f, E_sample_w, Npad)
         self.E_sample_t_window=np.real(self.E_sample_t_window[:len(t)//2])
         
         self.update_plot()
-
+        
     def update_plot(self):
         #self.FigureRef_FFT()
         #self.FigureRef.clear()
@@ -489,7 +490,7 @@ class BaseLine_dialog(QDialog, BaseLine_gui.Ui_Dialog):
     def regionUpdated(self):
         self.freq_lw=self.region.getRegion()[0]
         self.freq_hg=self.region.getRegion()[1]
-        print(self.freq_hg, self.freq_lw)
+        #print(self.freq_hg, self.freq_lw)
 
 
     def plot_ini(self):
