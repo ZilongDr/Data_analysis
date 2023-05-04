@@ -10,7 +10,7 @@ def SWT_Wavelet(data, w, l, max_num):
     coeff=pywt.swt(data, wavelet=w,level=l, norm=True)  
     coeff_new=[]
     for k in range(0,l,1):
-        print(k)
+        #print(k)
         cA=coeff[k][0]
         cD=coeff[k][1] # get cD parameter of each level
         
