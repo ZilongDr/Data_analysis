@@ -28,7 +28,7 @@ class Ui_Dialog(object):
         sizePolicy.setVerticalStretch(0)
         sizePolicy.setHeightForWidth(self.SetWindowButton.sizePolicy().hasHeightForWidth())
         self.SetWindowButton.setSizePolicy(sizePolicy)
-        self.SetWindowButton.setMaximumSize(QtCore.QSize(107, 50))
+        self.SetWindowButton.setMaximumSize(QtCore.QSize(200, 50))
         self.SetWindowButton.setObjectName("SetWindowButton")
         self.gridLayout.addWidget(self.SetWindowButton, 0, 1, 1, 1)
         self.OKButton = QtWidgets.QPushButton(Dialog)
