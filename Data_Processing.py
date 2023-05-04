@@ -213,11 +213,11 @@ class Window(QMainWindow, Ui_MainWindow):
             #print(self.df.keys())
             self.readData()
     
-    def combine_fft_data(self, t, E_t):
+    def combine_fft_data(self, t, E_t, apod=True):
         data={'Time': t, 'Signal': E_t}
         data_pd=pd.DataFrame(data=data)
         t_s=ut.ps_to_s(t)
-        f, E_w_complex=FT.FFT(t_s,E_t, self.Npad) #f in the unit of Hz, zeroN_factor: zero padding factor
+        f, E_w_complex=FT.FFT(t_s,E_t, self.Npad, apod) #f in the unit of Hz, zeroN_factor: zero padding factor
         f_THz=ut.Hz_to_THz(f)
         #E_w=abs(E_w_complex)
         data_fft={'Frequency':f_THz, 'FT_complex':E_w_complex}
@@ -237,6 +237,7 @@ class Window(QMainWindow, Ui_MainWindow):
         data=data.dropna(axis=1, how='all')
         col=data.columns
         self.dlg_file=Load_file_dialog(data)
+        apod=self.ApodButton.isChecked()
         if self.dlg_file.exec():
             try:
                 header=self.dlg_file.signal_header
@@ -248,7 +249,7 @@ class Window(QMainWindow, Ui_MainWindow):
                 t_ps=misc.convert_to_np(data[col[time_indx]])
                 t_ps=t_ps-t_ps[0]
                 t_interp=np.linspace(t_ps[0], t_ps[-1], 2**11)
-                print(t_interp)
+                #print(t_interp)
                 for counter, i in enumerate(signal_indx):
                     if i is not None:    
                         #if f_name is not None:
@@ -266,7 +267,7 @@ class Window(QMainWindow, Ui_MainWindow):
                         #pg.plot(t_ps, E_t)
                         #Data interpolation:
                         E_t_interp=np.interp(t_interp,t_ps,E_t)
-                        data_combined=self.combine_fft_data(t_interp, E_t_interp)
+                        data_combined=self.combine_fft_data(t_interp, E_t_interp, apod)
                         self.df[f_name_new]=data_combined
                         # update figure in tab 1
                         self.plot_data_tab(f_name_new)
@@ -303,6 +304,7 @@ class Window(QMainWindow, Ui_MainWindow):
     
     def Average(self):
         import difflib
+        apod=self.ApodButton.isChecked()
         items=self.listWidget.selectedItems()
         name_list=[]
         for i in range(len(items)):
@@ -317,7 +319,7 @@ class Window(QMainWindow, Ui_MainWindow):
             y=y+Signal
         data_t=misc.convert_to_np(self.df[name_list[0]]['Time'])
         y=np.array(y/len(items))
-        data_to_save=self.combine_fft_data(data_t, y)
+        data_to_save=self.combine_fft_data(data_t, y, apod)
         self.df[name_to_save]=data_to_save
         self.plot_data_tab(name_to_save)
         self.listWidget.addItem(name_to_save)
@@ -444,15 +446,16 @@ class Window(QMainWindow, Ui_MainWindow):
     
     def TFWindow_remv(self, data_ref, data_sample):
         self.dlg_TFWindow=TFWindow_dialog(data_ref, data_sample)
+        apod=self.ApodButton.isChecked()
         if self.dlg_TFWindow.exec(): 
             name_remv_sample=self.sample_remv_name+'_time_window_remv'
             data_sample_remv=self.dlg_TFWindow.E_sample_t_window
             
-            data_combined_sample=self.combine_fft_data(self.dlg_TFWindow.t_ps2_sample, data_sample_remv)
+            data_combined_sample=self.combine_fft_data(self.dlg_TFWindow.t_ps_sample, data_sample_remv, apod)
             
             
             name_remv_ref=self.ref_remv_name+'_time_window_remv'
-            data_ref={'Time': self.dlg_TFWindow.t_ps2_ref, 'Signal': self.dlg_TFWindow.E_t_ref_window}
+            data_ref={'Time': self.dlg_TFWindow.t_ps_ref, 'Signal': self.dlg_TFWindow.E_t_ref_window}
             data_pd=pd.DataFrame(data=data_ref)
 
             data_ref_fft={'Frequency':self.dlg_TFWindow.f_ref_THz, 'FT_complex':self.dlg_TFWindow.E_ref_w_window}
@@ -525,10 +528,11 @@ class Window(QMainWindow, Ui_MainWindow):
     
     def Moving_Aver(self, t_ps, E_t, *args):
         """Launch the employee dialog."""
+        apod=self.ApodButton.isChecked()
         if self.dlg_MA.exec():     
             try:
                 y_smooth=moving_average.moving_average(E_t, int(self.dlg_MA.Window_num))
-                data_combined=self.combine_fft_data(t_ps, y_smooth)
+                data_combined=self.combine_fft_data(t_ps, y_smooth, apod)
 
                 name_smooth=self.select_name+'_moving_average_Window='+self.dlg_MA.Window_num
                 self.name_smooth=name_smooth
@@ -542,11 +546,12 @@ class Window(QMainWindow, Ui_MainWindow):
     
     def Savgol(self, t_ps, E_t, *args):
         from scipy.signal import savgol_filter
+        apod=self.ApodButton.isChecked()
         if self.dlg_Sav.exec(): 
             try:
                 y_smooth=savgol_filter(E_t, int(self.dlg_Sav.Window_num), int(self.dlg_Sav.FilterOrder_num))
                 
-                data_combined=self.combine_fft_data(t_ps, y_smooth)
+                data_combined=self.combine_fft_data(t_ps, y_smooth, apod)
                 name_smooth=self.select_name+'_Savgol_Window='+self.dlg_Sav.Window_num+'_order='+self.dlg_Sav.FilterOrder_num
                 self.name_smooth=name_smooth
                 self.df_select[name_smooth]=data_combined
@@ -558,6 +563,7 @@ class Window(QMainWindow, Ui_MainWindow):
             
     def swt(self, t_ps, E_t, *args):
         import pywt
+        apod=self.ApodButton.isChecked()
         #data=self.df_select[self.select_name]
         
         self.dlg_SWT=SWT_dialog(args[0])
@@ -566,7 +572,7 @@ class Window(QMainWindow, Ui_MainWindow):
             try:
                 y_smooth, coeff, coeff_new=SWT.SWT_Wavelet(E_t, self.dlg_SWT.wt, int(self.dlg_SWT.Level_num), self.dlg_SWT.max_num)
                 
-                data_combined=self.combine_fft_data(t_ps, y_smooth)
+                data_combined=self.combine_fft_data(t_ps, y_smooth, apod)
 
                 name_smooth=self.select_name+'_SWT_Wavelet='+self.dlg_SWT.wt+'_level='+self.dlg_SWT.Level_num
                 self.name_smooth=name_smooth
